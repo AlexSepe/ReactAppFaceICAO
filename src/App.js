@@ -403,12 +403,12 @@ function App() {
       if (!mpDetected || isAnalyzing) return;
 
       const now = Date.now();
-      if (now - lastAutoCapture < 1000) return;
+      if (now - lastAutoCapture < 200) return;
       if (autoCompliant && now - lastCompliantTime < 5000) return;
 
       setLastAutoCapture(now);
       captureAndAnalyze();
-    }, 500);
+    }, 200);
 
     return () => clearInterval(interval);
   }, [autoCapture, modelsReady, mpDetected, lastAutoCapture, isAnalyzing, autoCompliant, lastCompliantTime]);
