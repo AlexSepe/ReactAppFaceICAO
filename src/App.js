@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
+import AnalysisMetrics from './AnalysisMetrics';
 
 const width = 500;
 const height = 500;
@@ -45,8 +46,13 @@ function analyzeImageData(img, detection) {
 
   const rollDeg = Math.abs(Math.atan2(rightEyeCenter.y - leftEyeCenter.y, rightEyeCenter.x - leftEyeCenter.x) * 180 / Math.PI);
   const eyeMidX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
+  const eyeMidY = (leftEyeCenter.y + rightEyeCenter.y) / 2;
+
   const yawDeg = Math.abs(((noseTip.x - eyeMidX) / faceBox.width) * 100);
-  const pitchDeg = Math.abs(((noseTip.y - (leftEyeCenter.y + rightEyeCenter.y) / 2) / faceBox.height) * 100);
+
+  // Use a more stable pitch approximation based on nose vertical offset relative to half face height
+  // This reduces overestimation and gives results closer to actual head nod angle.
+  const pitchDeg = Math.abs(Math.atan2(noseTip.y - eyeMidY, faceBox.height * 0.5) * 180 / Math.PI);
   
   const alignmentGood = rollDeg <= 7 && yawDeg <= 15 && pitchDeg <= 15;
   const minFaceSizeGood = faceHeightRatio >= 0.40 && faceHeightRatio <= 0.75;
@@ -145,13 +151,19 @@ function App() {
   const [availableCameras, setAvailableCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState(null);
   const [theme, setTheme] = useState('light');
-  const [autoCapture, setAutoCapture] = useState(false);
+  const [autoCapture, setAutoCapture] = useState(true);
   const [lastAutoCapture, setLastAutoCapture] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const [autoCompliant, setAutoCompliant] = useState(false);
+  const [lastCompliantTime, setLastCompliantTime] = useState(0);
+  const [compliantSnapshot, setCompliantSnapshot] = useState(null);
+
   const [mpDetected, setMpDetected] = useState(false);
+  const [fps, setFps] = useState("0");
   const [facesDetected, setFacesDetected] = useState(0);
   const [boundingBox, setBoundingBox] = useState([]);
+  const [detections, setDetections] = useState([]);
   const [mpIsLoading, setMpIsLoading] = useState(true);
 
   const webcamRef = useRef(null);
@@ -198,14 +210,18 @@ function App() {
       if (!isActive) return;
       const video = webcamRef.current?.video;
       if (!video || video.readyState !== 4) return;
+      const t0 = performance.now();
 
       const results = await faceapi
         .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.45 }))
         .withFaceLandmarks(true);
 
       if (results && results.length > 0) {
+        const fps = 1000 / (performance.now() - t0);
+        setFps(fps.toLocaleString());
         setMpDetected(true);
         setFacesDetected(results.length);
+        setDetections(results);
         setBoundingBox(results.map(det => ({
           xMin: det.detection.box.x / video.videoWidth,
           yMin: det.detection.box.y / video.videoHeight,
@@ -218,6 +234,7 @@ function App() {
         setMpDetected(false);
         setFacesDetected(0);
         setBoundingBox([]);
+        setDetections([]);
       }
     }, 250);
 
@@ -299,23 +316,85 @@ function App() {
       ctx.lineWidth = 3;
       ctx.strokeRect(xMin, yMin, w, h);
 
+      // Draw landmarks if available
+      if (detections && detections.length > 0) {
+        const detection = detections[0];
+        if (detection.landmarks) {
+          const scaleX = rect.width / video.videoWidth;
+          const scaleY = rect.height / video.videoHeight;
+
+          // Helper to draw landmark points and boxes
+          const drawLandmarkBox = (points, color) => {
+            if (!points || points.length === 0) return;
+            const xs = points.map(p => (isMirrored ? video.videoWidth - p.x : p.x) * scaleX);
+            const ys = points.map(p => p.y * scaleY);
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8);
+
+            // Draw points
+            ctx.fillStyle = color;
+            points.forEach(p => {
+              const px = (isMirrored ? video.videoWidth - p.x : p.x) * scaleX;
+              const py = p.y * scaleY;
+              ctx.beginPath();
+              ctx.arc(px, py, 3, 0, 2 * Math.PI);
+              ctx.fill();
+            });
+          };
+
+          // Draw eyes, nose, and mouth
+          try {
+            drawLandmarkBox(detection.landmarks.getLeftEye(), 'rgba(255, 0, 0, 0.8)');
+            drawLandmarkBox(detection.landmarks.getRightEye(), 'rgba(255, 0, 0, 0.8)');
+            drawLandmarkBox(detection.landmarks.getNose(), 'rgba(0, 255, 0, 0.8)');
+            drawLandmarkBox(detection.landmarks.getMouth(), 'rgba(0, 0, 255, 0.8)');
+          } catch (err) {
+            console.warn('Error drawing landmarks:', err);
+          }
+        }
+      }
+
       setFramingGuidance(good
-        ? `Framing good: center ${centerOK ? 'OK' : 'off-center'}, size ${sizeOK ? 'OK' : 'bad'} (${(sizeRatio * 100).toFixed(0)}%).`
-        : `Adjust framing: center ${centerOK ? 'OK' : 'off-center'}, size ${sizeOK ? 'OK' : 'bad'} (${(sizeRatio * 100).toFixed(0)}%).`);
+        ? `Framing good: center ${centerOK ? 'OK' : 'off-center'}, size ${sizeOK ? 'OK' : 'bad'} (${(sizeRatio * 100).toFixed(0)}%). FPS: ${fps}`
+        : `Adjust framing: center ${centerOK ? 'OK' : 'off-center'}, size ${sizeOK ? 'OK' : 'bad'} (${(sizeRatio * 100).toFixed(0)}%). FPS: ${fps}`);
     };
 
     drawOverlay();
     const timer = setInterval(drawOverlay, 100);
     return () => clearInterval(timer);
-  }, [mpDetected, boundingBox]);
+  }, [mpDetected, boundingBox, detections]);
 
   const globalStatus = useMemo(() => {
     if (!modelsReady) return 'Loading face API models...';
     const webcamReady = !!webcamRef.current?.video;
     if (!webcamReady) return 'Starting webcam...';
     if (!mpDetected) return 'Webcam ready, no face detected yet. Position your face in frame.';
+    if (autoCapture) return `Face detected by MediaPipe (${facesDetected || 0}); real-time automatic ICAO analysis running.`;
     return `Face detected by MediaPipe (${facesDetected || 0}); click Capture to run ICAO checks.`;
-  }, [modelsReady, mpDetected, facesDetected]);
+  }, [modelsReady, mpDetected, facesDetected, autoCapture]);
+
+  useEffect(() => {
+    if (!modelsReady) return;
+
+    if (!mpDetected) {
+      setAutoCompliant(false);
+      setReport(prev => prev.map(rule => {
+        if (rule.id === 'faceDetected') {
+          return { ...rule, passed: false, message: 'No face detected in live camera' };
+        }
+        return rule;
+      }));
+      setQualityScore(0);
+      setQualityGrade('C');
+      setStateMessage('No face detected in live stream.');
+    }
+  }, [mpDetected, modelsReady]);
 
   useEffect(() => {
     if (!autoCapture || !modelsReady) return;
@@ -325,13 +404,14 @@ function App() {
 
       const now = Date.now();
       if (now - lastAutoCapture < 1000) return;
+      if (autoCompliant && now - lastCompliantTime < 5000) return;
 
       setLastAutoCapture(now);
       captureAndAnalyze();
     }, 500);
 
     return () => clearInterval(interval);
-  }, [autoCapture, modelsReady, mpDetected, lastAutoCapture, isAnalyzing]);
+  }, [autoCapture, modelsReady, mpDetected, lastAutoCapture, isAnalyzing, autoCompliant, lastCompliantTime]);
 
   const drawCapturedOverlay = (img, detection) => {
     const canvas = capturedCanvasRef.current;
@@ -391,7 +471,6 @@ function App() {
         return;
       }
 
-      setCapturedImage(screenshot);
       setStateMessage('Analyzing captured image with face-api.js...');
 
       const img = await loadImageFromDataURL(screenshot);
@@ -411,6 +490,7 @@ function App() {
       }
 
       if (!detection) {
+        setAutoCompliant(false);
         setReport(initialReport.map(item => ({ ...item, passed: false, message: 'Face not detected' })));
         setAnalysisSummary(['No face detected in the image.']);
         setQualityScore(0);
@@ -433,10 +513,23 @@ function App() {
       const successes = Object.values(res).filter(v => !!v).length;
       const score = Math.round((successes / Object.keys(res).length) * 100);
       const grade = getGrade(score);
+      const allPass = successes === Object.keys(res).length;
 
       setReport(nextReport);
       setQualityScore(score);
       setQualityGrade(grade);
+      setAutoCompliant(allPass);
+
+      if (allPass) {
+        const now = Date.now();
+        setCapturedImage(screenshot);
+        setCompliantSnapshot(screenshot);
+        setLastCompliantTime(now);
+        setStateMessage('✅ Auto-captured compliant image saved. Auto-capture stopped.');
+        setAutoCapture(false);
+      } else {
+        setStateMessage('⚠️ Auto-analysis complete, not compliant yet.');
+      }
 
       setAnalysisSummary([
         `Roll ${metrics.rollDeg}° (<=7° allowed)`,
@@ -447,9 +540,9 @@ function App() {
         `Background variance ${metrics.bgVariance}`,
         `Lighting variance ${metrics.faceVariance}, brightness ${metrics.faceBrightness}`
       ]);
-      setStateMessage('Analysis complete. See structured compliance report below.');
     } catch (err) {
       console.error(err);
+      setAutoCompliant(false);
       setStateMessage('Error during analysis. Review console for details.');
     } finally {
       setIsAnalyzing(false);
@@ -457,6 +550,14 @@ function App() {
   }
 
   const overallPass = report.every(item => item.passed === true);
+
+  const downloadCompliantPhoto = () => {
+    if (!compliantSnapshot) return;
+    const link = document.createElement('a');
+    link.href = compliantSnapshot;
+    link.download = 'compliant-passport-photo.jpg';
+    link.click();
+  };
 
   return (
     <div className="app-container">
@@ -475,13 +576,20 @@ function App() {
           </div>
           <div className="status"><strong>Model/Webcam status:</strong> {globalStatus}</div>
           <div className="controls">
-            <button onClick={captureAndAnalyze} disabled={!modelsReady || !mpDetected || isAnalyzing}>Capture & Validate</button>
+            <button
+              onClick={captureAndAnalyze}
+              disabled={!modelsReady || !mpDetected || isAnalyzing || autoCapture}
+              title={autoCapture ? 'Real-time auto mode is active' : 'Manual capture'}>
+              {autoCapture ? 'Real-time running (manual disabled)' : 'Capture & Validate'}
+            </button>
             <button onClick={() => {
               setReport(initialReport);
               setAnalysisSummary([]);
               setQualityScore(null);
               setQualityGrade('-');
               setCapturedImage(null);
+              setAutoCompliant(false);
+              setCompliantSnapshot(null);
               setStateMessage('Reset to initial state.');
             }} disabled={!modelsReady}>Reset Report</button>
             <label className="auto-capture-label">
@@ -496,6 +604,12 @@ function App() {
             <div className="status">
               Auto-capture: {autoCapture ? 'On' : 'Off'} | Last run: {lastAutoCapture ? new Date(lastAutoCapture).toLocaleTimeString() : 'Never'}
             </div>
+            <div className="status">
+              Auto-compliant: {autoCompliant ? 'Yes' : 'No'}{autoCompliant && lastCompliantTime ? ` (saved at ${new Date(lastCompliantTime).toLocaleTimeString()})` : ''}
+            </div>
+            {compliantSnapshot && (
+              <div className="status">Saved compliant snapshot is available in Captured frame area.</div>
+            )}
 
           {availableCameras.length > 0 && (
             <div className="camera-selector">
@@ -538,44 +652,99 @@ function App() {
           <h2>Captured frame with landmark overlay</h2>
           <canvas ref={capturedCanvasRef} className="captured-canvas" />
           {!capturedImage && <div style={{ padding: '1rem', color: '#777' }}>No snapshot captured yet.</div>}
+
+          {autoCompliant && compliantSnapshot && (
+            <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f0f9f0', border: '2px solid #1a8c11', borderRadius: '4px' }}>
+              <div style={{ color: '#1a8c11', fontWeight: 'bold', marginBottom: '0.5rem' }}>✅ Compliant snapshot ready</div>
+              <button 
+                onClick={downloadCompliantPhoto}
+                style={{ 
+                  padding: '0.5rem 1rem', 
+                  backgroundColor: '#1a8c11', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = '#158c0c'}
+                onMouseOut={(e) => e.target.style.backgroundColor = '#1a8c11'}
+              >
+                Download compliant passport photo
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="panel">
-        <h2>ICAO Compliance Report</h2>
-        <p><strong>Quality Score:</strong> {qualityScore !== null ? `${qualityScore}%` : 'N/A'}&nbsp;|&nbsp;<strong>Grade:</strong> {qualityGrade}</p>
-        <table className="rule-table">
+      <div 
+        style={{
+          position: 'fixed',
+          top: '2rem',
+          left: '2rem',
+          width: '500px',
+          maxHeight: '70vh',
+          backgroundColor: 'var(--bg-secondary, #f5f5f5)',
+          border: '1px solid var(--border-color, #ddd)',
+          borderRadius: '8px',
+          padding: '1.25rem',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          zIndex: 999,
+          overflowY: 'auto',
+          fontFamily: 'var(--font-family, sans-serif)'
+        }}
+      >
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.1rem' }}>ICAO Compliance Report</h2>
+        <p style={{ marginBottom: '1rem', fontSize: '0.95rem' }}>
+          <strong>Quality Score:</strong> {qualityScore !== null ? `${qualityScore}%` : 'N/A'}&nbsp;|&nbsp;<strong>Grade:</strong> {qualityGrade}
+        </p>
+        <table className="rule-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
           <thead>
             <tr>
-              <th>Rule</th>
-              <th>Outcome</th>
-              <th>Details</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Rule</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Outcome</th>
+              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Details</th>
             </tr>
           </thead>
           <tbody>
             {report.map(item => (
-              <tr key={item.id}>
-                <td>{item.label}</td>
-                <td className={item.passed ? 'pass' : item.passed === false ? 'fail' : ''}>
+              <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: '0.5rem' }}>{item.label}</td>
+                <td 
+                  style={{ 
+                    padding: '0.5rem',
+                    color: item.passed ? '#1a8c11' : item.passed === false ? '#c41e3a' : '#666',
+                    fontWeight: 'bold'
+                  }}>
                   {item.passed === null ? 'Pending' : item.passed ? 'Pass' : 'Fail'}
                 </td>
-                <td>{item.message}</td>
+                <td style={{ padding: '0.5rem' }}>{item.message}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        <div className="status">
-          Overall: <span className={overallPass ? 'pass' : 'fail'}>{overallPass ? 'ICAO compliant (pass)' : 'Not compliant (fail)'}</span>
-        </div>
-
-        <div>
-          <h3>Analysis metrics</h3>
-          <ul className="summary-list">
-            {analysisSummary.map((item, idx) => <li key={idx}>{item}</li>)}
-          </ul>
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.75rem',
+          borderRadius: '4px',
+          backgroundColor: overallPass ? '#f0f9f0' : '#fff5f5',
+          border: `2px solid ${overallPass ? '#1a8c11' : '#c41e3a'}`,
+          textAlign: 'center',
+          fontWeight: 'bold',
+          color: overallPass ? '#1a8c11' : '#c41e3a'
+        }}>
+          {overallPass ? '✅ ICAO compliant (pass)' : '❌ Not compliant (fail)'}
         </div>
       </div>
+
+      <AnalysisMetrics
+        analysisSummary={analysisSummary}
+        report={report}
+        qualityScore={qualityScore}
+        qualityGrade={qualityGrade}
+        overallPass={overallPass}
+      />
 
       <div className="panel">
         <h3>Tips for better passport/ID photos</h3>
