@@ -1,0 +1,252 @@
+:root {
+  --bg: #f7f8fc;
+  --text: #1d1d27;
+  --panel: #ffffff;
+  --panel-border: #dde1ee;
+  --shadow: rgba(0,0,0,0.08);
+  --button-bg: #3846ff;
+  --button-border: #4458a9;
+  --button-hover: #5a58ff;
+  --status: #4a4d5c;
+  --table-border: #dee2f0;
+  --table-header: #f3f5ff;
+  --table-row: #ffffff;
+  --pass: #0f7e4a;
+  --fail: #d34c40;
+}
+
+.theme-dark {
+  --bg: #101520;
+  --text: #e8eef5;
+  --panel: #161f2f;
+  --panel-border: #2c3340;
+  --shadow: rgba(0,0,0,0.45);
+  --button-bg: #2f65ff;
+  --button-border: #4458a9;
+  --button-hover: #3f79ff;
+  --status: #b8c7db;
+  --table-border: #2d3a55;
+  --table-header: #1f2a44;
+  --table-row: #131d31;
+  --pass: #78d079;
+  --fail: #f9988a;
+}
+
+.theme-light {
+  --bg: #f7f8fc;
+  --text: #1d1d27;
+  --panel: #ffffff;
+  --panel-border: #dde1ee;
+  --shadow: rgba(0,0,0,0.08);
+  --button-bg: #3846ff;
+  --button-border: #4458a9;
+  --button-hover: #5a58ff;
+  --status: #4a4d5c;
+  --table-border: #dee2f0;
+  --table-header: #f3f5ff;
+  --table-row: #ffffff;
+  --pass: #0f7e4a;
+  --fail: #d34c40;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-container {
+  max-width: 1100px;
+  margin: 1.2rem auto;
+  padding: 1.2rem;
+}
+
+h1 {
+  margin: 0.4rem 0 1.2rem;
+  color: var(--text);
+}
+
+.panel {
+  position: relative;
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: 0 5px 18px var(--shadow);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.video-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.webcam-box,
+.photo-box {
+  flex: 1;
+  min-width: 290px;
+}
+
+.webcam-wrapper {
+  position: relative;
+  width: 100%;
+  max-height: 480px;
+  overflow: hidden;
+}
+
+.camera-selector {
+  margin-bottom: 0.8rem;
+}
+
+.camera-selector select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #dbe1ef;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 0.93rem;
+}
+.webcam-video {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 8px;
+  transform: scaleX(-1);
+}
+
+.webcam-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.captured-canvas {
+  width: 100%;
+  max-height: 480px;
+  border-radius: 8px;
+  border: 1px solid #c4c9df;
+}
+
+.webcam-box video,
+.photo-box img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  border: 1px solid var(--table-border);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.8rem 0;
+}
+
+.page-top-right {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.theme-selector {
+  display: flex;
+  align-items: center;
+}
+
+.theme-selector select {
+  margin-left: 0.4rem;
+}
+button {
+  background: var(--button-bg);
+  color: #fff;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.56rem 1rem;
+}
+
+button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+..camera-selector select,
+.theme-selector select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+}
+
+.status {
+  color: var(--status);
+}
+
+.rule-table th,
+.rule-table td {
+  border: 1px solid var(--table-border);
+  color: var(--text);
+}
+
+.rule-table th {
+  background: var(--table-header);
+}
+
+.rule-table {
+  background: var(--table-row);
+}
+
+.pass {
+  color: var(--pass);
+}
+
+.fail {
+  color: var(--fail);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.status {
+  margin: 0.5rem 0 0.8rem;
+  font-size: 0.92rem;
+}
+
+.rule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rule-table th,
+.rule-table td {
+  border: 1px solid #dee2f0;
+  padding: 0.65rem;
+  text-align: left;
+}
+
+.rule-table th {
+  background: #f3f5ff;
+}
+
+.pass {
+  color: #0f7e4a;
+  font-weight: 600;
+}
+
+.fail {
+  color: #d34c40;
+  font-weight: 600;
+}
+
+.summary-list {
+  line-height: 1.45;
+}
