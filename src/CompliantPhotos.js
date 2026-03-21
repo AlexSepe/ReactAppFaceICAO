@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
+import { removeImageBackground } from './lib/backgroundRemoval';
 
 function CompliantPhotos({ compliantSnapshots }) {
   const [position, setPosition] = useState({ x: null, y: null });
@@ -7,6 +8,10 @@ function CompliantPhotos({ compliantSnapshots }) {
   const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [processingIndex, setProcessingIndex] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, dispatchProgress] = useReducer((state, action) => action, 0);
+  const [taskName, dispatchTaskName] = useReducer((state, action) => action, "initializing...");
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -44,9 +49,35 @@ function CompliantPhotos({ compliantSnapshots }) {
     link.click();
   };
 
-  const formatPhoto = (snapshot, index) => {
-    console.log(`Format option for photo ${index + 1}:`, snapshot);
-    console.log('This will eventually apply formatting/processing to the photo');
+  const formatPhoto = async (snapshot, index) => {
+    try {
+      setProcessingIndex(index);
+      setIsProcessing(true);
+      dispatchProgress(0);
+      console.log(`Processing photo ${index + 1} - removing background!...`);
+      
+      const processedImage = await removeImageBackground(snapshot, {
+        progress: (key, current, total) => {
+            const perc = (current / total) * 100;
+            dispatchTaskName(`${key}`);
+            dispatchProgress(perc);
+            console.log(`Background removal progress for photo ${index + 1}: ${key} | ${current}/${total} - percentage: ${perc.toFixed(2)}%`);            
+        },
+        debug: true
+      });
+      
+      // Show processed image in modal
+      setSelectedPhoto(processedImage);
+      setViewModalOpen(true);
+      
+      console.log('Background removed successfully!');
+    } catch (error) {
+      console.error('Background removal failed:', error);
+      alert(`Error processing image: ${error.message}`);
+    } finally {
+      setProcessingIndex(null);
+      setIsProcessing(false);
+    }
   };
 
   const viewPhoto = (snapshot) => {
@@ -171,18 +202,78 @@ function CompliantPhotos({ compliantSnapshots }) {
                 </button>
                 <button
                   onClick={() => formatPhoto(snapshot, index)}
-                  style={formatButtonStyle}
-                  onMouseOver={(e) => e.target.style.backgroundColor = '#e68900'}
-                  onMouseOut={(e) => e.target.style.backgroundColor = '#ff9800'}
-                  title="Format/Process photo"
+                  disabled={processingIndex === index}
+                  style={{
+                    ...formatButtonStyle,
+                    backgroundColor: processingIndex === index ? '#ccc' : '#ff9800',
+                    opacity: processingIndex === index ? 0.6 : 1,
+                    cursor: processingIndex === index ? 'not-allowed' : 'pointer'
+                  }}
+                  title="Remove background from photo"
                 >
-                  🎨 Format
+                  {processingIndex === index ? '⏳ Processing...' : '🎨 Remove BG'}
                 </button>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Processing Popup */}
+      {isProcessing && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1500
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              padding: '20px',
+              borderRadius: '8px',
+              textAlign: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              minWidth: '300px'
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>🎨 Processing Background Removal</h3>
+            <p style={{ marginBottom: '1rem' }}>Please wait while we remove the background...</p>
+            <p style={{ marginBottom: '1rem' }}>{taskName}</p>            
+            <div style={{ marginBottom: '1rem' }}>
+              <div
+                style={{
+                  width: '200px',
+                  height: '20px',
+                  backgroundColor: '#f0f0f0',
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  margin: '0 auto'
+                }}
+              >
+                <div
+                  style={{
+                    width: `${progress}%`,
+                    height: '100%',
+                    backgroundColor: '#4caf50'
+                  }}
+                ></div>
+              </div>
+              <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                {progress.toFixed(2)}% Complete
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Modal */}
       {viewModalOpen && selectedPhoto && (

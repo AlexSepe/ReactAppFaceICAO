@@ -350,14 +350,14 @@ function App() {
           };
 
           // Draw eyes, nose, and mouth
-          try {
-            drawLandmarkBox(detection.landmarks.getLeftEye(), 'rgba(255, 0, 0, 0.8)');
-            drawLandmarkBox(detection.landmarks.getRightEye(), 'rgba(255, 0, 0, 0.8)');
-            drawLandmarkBox(detection.landmarks.getNose(), 'rgba(0, 255, 0, 0.8)');
-            drawLandmarkBox(detection.landmarks.getMouth(), 'rgba(0, 0, 255, 0.8)');
-          } catch (err) {
-            console.warn('Error drawing landmarks:', err);
-          }
+          // try {
+          //   drawLandmarkBox(detection.landmarks.getLeftEye(), 'rgba(255, 0, 0, 0.8)');
+          //   drawLandmarkBox(detection.landmarks.getRightEye(), 'rgba(255, 0, 0, 0.8)');
+          //   drawLandmarkBox(detection.landmarks.getNose(), 'rgba(0, 255, 0, 0.8)');
+          //   drawLandmarkBox(detection.landmarks.getMouth(), 'rgba(0, 0, 255, 0.8)');
+          // } catch (err) {
+          //   console.warn('Error drawing landmarks:', err);
+          // }
         }
       }
 
@@ -453,9 +453,9 @@ function App() {
       ctx.strokeRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8);
     };
 
-    drawBox(leftEye);
-    drawBox(rightEye);
-    drawBox(nose);
+    // drawBox(leftEye);
+    // drawBox(rightEye);
+    // drawBox(nose);
   };
 
   async function captureAndAnalyze() {
