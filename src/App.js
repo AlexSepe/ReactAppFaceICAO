@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from '@vladmandic/face-api';
 import AnalysisMetrics from './AnalysisMetrics';
+import CompliantPhotos from './CompliantPhotos';
 
 const width = 500;
 const height = 500;
@@ -157,7 +158,7 @@ function App() {
 
   const [autoCompliant, setAutoCompliant] = useState(false);
   const [lastCompliantTime, setLastCompliantTime] = useState(0);
-  const [compliantSnapshot, setCompliantSnapshot] = useState(null);
+  const [compliantSnapshots, setCompliantSnapshots] = useState([]);
 
   const [mpDetected, setMpDetected] = useState(false);
   const [fps, setFps] = useState("0");
@@ -523,7 +524,7 @@ function App() {
       if (allPass) {
         const now = Date.now();
         setCapturedImage(screenshot);
-        setCompliantSnapshot(screenshot);
+        setCompliantSnapshots(prev => [...prev, screenshot]);
         setLastCompliantTime(now);
         setStateMessage('✅ Auto-captured compliant image saved. Auto-capture stopped.');
         setAutoCapture(false);
@@ -552,16 +553,16 @@ function App() {
   const overallPass = report.every(item => item.passed === true);
 
   const downloadCompliantPhoto = () => {
-    if (!compliantSnapshot) return;
+    if (compliantSnapshots.length === 0) return;
     const link = document.createElement('a');
-    link.href = compliantSnapshot;
+    link.href = compliantSnapshots[compliantSnapshots.length - 1];
     link.download = 'compliant-passport-photo.jpg';
     link.click();
   };
 
   return (
     <div className="app-container">
-      <h1>Passport / ID Photo ICAO Compliance</h1>
+      <h1>ID Photo ICAO Compliance</h1>
 
       <div className="panel">
         <div>
@@ -589,7 +590,7 @@ function App() {
               setQualityGrade('-');
               setCapturedImage(null);
               setAutoCompliant(false);
-              setCompliantSnapshot(null);
+              setCompliantSnapshots([]);
               setStateMessage('Reset to initial state.');
             }} disabled={!modelsReady}>Reset Report</button>
             <label className="auto-capture-label">
@@ -607,8 +608,8 @@ function App() {
             <div className="status">
               Auto-compliant: {autoCompliant ? 'Yes' : 'No'}{autoCompliant && lastCompliantTime ? ` (saved at ${new Date(lastCompliantTime).toLocaleTimeString()})` : ''}
             </div>
-            {compliantSnapshot && (
-              <div className="status">Saved compliant snapshot is available in Captured frame area.</div>
+            {compliantSnapshots.length > 0 && (
+              <div className="status">Saved {compliantSnapshots.length} compliant snapshot(s) available.</div>
             )}
 
           {availableCameras.length > 0 && (
@@ -653,9 +654,9 @@ function App() {
           <canvas ref={capturedCanvasRef} className="captured-canvas" />
           {!capturedImage && <div style={{ padding: '1rem', color: '#777' }}>No snapshot captured yet.</div>}
 
-          {autoCompliant && compliantSnapshot && (
+          {autoCompliant && compliantSnapshots.length > 0 && (
             <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#f0f9f0', border: '2px solid #1a8c11', borderRadius: '4px' }}>
-              <div style={{ color: '#1a8c11', fontWeight: 'bold', marginBottom: '0.5rem' }}>✅ Compliant snapshot ready</div>
+              <div style={{ color: '#1a8c11', fontWeight: 'bold', marginBottom: '0.5rem' }}>✅ {compliantSnapshots.length} Compliant snapshot(s) ready</div>
               <button 
                 onClick={downloadCompliantPhoto}
                 style={{ 
@@ -745,6 +746,8 @@ function App() {
         qualityGrade={qualityGrade}
         overallPass={overallPass}
       />
+
+      <CompliantPhotos compliantSnapshots={compliantSnapshots} />
 
       <div className="panel">
         <h3>Tips for better passport/ID photos</h3>
