@@ -15,7 +15,7 @@ const REMOTE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api
 const initialReport = [
   { id: 'faceDetected', label: 'Face detected', passed: null, message: 'Waiting for detection' },
   { id: 'alignment', label: 'Head alignment (roll/yaw/pitch)', passed: null, message: 'Waiting for detection' },
-  { id: 'faceSize', label: 'Face size ratio (>=40% && <=75%)', passed: null, message: 'Waiting for detection' },
+  { id: 'faceSize', label: 'Face size ratio (>=60% && <=75%)', passed: null, message: 'Waiting for detection' },
   { id: 'resolution', label: 'Image resolution (>=800x600)', passed: null, message: 'Waiting for detection' },
   { id: 'background', label: 'Background uniformity (low variance)', passed: null, message: 'Waiting for detection' },
   { id: 'lighting', label: 'Lighting uniformity (even exposure)', passed: null, message: 'Waiting for detection' }
@@ -55,8 +55,8 @@ function analyzeImageData(img, detection) {
   // This reduces overestimation and gives results closer to actual head nod angle.
   const pitchDeg = Math.abs(Math.atan2(noseTip.y - eyeMidY, faceBox.height * 0.5) * 180 / Math.PI);
   
-  const alignmentGood = rollDeg <= 7 && yawDeg <= 15 && pitchDeg <= 15;
-  const minFaceSizeGood = faceHeightRatio >= 0.40 && faceHeightRatio <= 0.75;
+  const alignmentGood = rollDeg <= 7 && yawDeg <= 15 && pitchDeg <= 25;
+  const minFaceSizeGood = faceHeightRatio >= 0.60 && faceHeightRatio <= 0.75;
   const resolutionGood = width >= 800 && height >= 600;
 
   let bgSum = 0;
@@ -535,7 +535,7 @@ function App() {
       setAnalysisSummary([
         `Roll ${metrics.rollDeg}° (<=7° allowed)`,
         `Yaw ${metrics.yawDeg}° (<=15° allowed)`,
-        `Pitch ${metrics.pitchDeg}° (<=15° allowed)`,
+        `Pitch ${metrics.pitchDeg}° (<=25° allowed)`,
         `Face height ratio ${metrics.faceHeightRatio}%`,
         `Resolution ${metrics.resolution}`,
         `Background variance ${metrics.bgVariance}`,
