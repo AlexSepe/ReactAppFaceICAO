@@ -14,11 +14,12 @@ const REMOTE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api
 //{"faceDetected":true,"alignment":false,"faceSize":true,"resolution":true,"background":false,"lighting":true}
 const initialReport = [
   { id: 'faceDetected', label: 'Face detected', passed: null, message: 'Waiting for detection' },
+  { id: 'neutralExpression', label: 'Neutral expression', passed: null, message: 'Waiting for detection' },
   { id: 'alignment', label: 'Head alignment (roll/yaw/pitch)', passed: null, message: 'Waiting for detection' },
   { id: 'faceSize', label: 'Face size ratio (>=60% && <=75%)', passed: null, message: 'Waiting for detection' },
   { id: 'resolution', label: 'Image resolution (>=800x600)', passed: null, message: 'Waiting for detection' },
   { id: 'background', label: 'Background uniformity (low variance)', passed: null, message: 'Waiting for detection' },
-  { id: 'lighting', label: 'Lighting uniformity (even exposure)', passed: null, message: 'Waiting for detection' }
+  { id: 'lighting', label: 'Lighting uniformity (even exposure)', passed: null, message: 'Waiting for detection' }  
 ];
 
 function getPointCenter(points) {
@@ -44,21 +45,40 @@ function analyzeImageData(img, detection) {
   const rightEyeCenter = getPointCenter(detection.landmarks.getRightEye());
   const noseTip = detection.landmarks.getNose()[3] || detection.landmarks.getNose()[0];
   const mouthCenter = getPointCenter(detection.landmarks.getMouth());
-
-  const rollDeg = Math.abs(Math.atan2(rightEyeCenter.y - leftEyeCenter.y, rightEyeCenter.x - leftEyeCenter.x) * 180 / Math.PI);
+  
   const eyeMidX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
   const eyeMidY = (leftEyeCenter.y + rightEyeCenter.y) / 2;
 
-  const yawDeg = Math.abs(((noseTip.x - eyeMidX) / faceBox.width) * 100);
+  // const rollDeg = Math.abs(Math.atan2(rightEyeCenter.y - leftEyeCenter.y, rightEyeCenter.x - leftEyeCenter.x) * 180 / Math.PI);
+  // const yawDeg = Math.abs(((noseTip.x - eyeMidX) / faceBox.width) * 100);
+  // const pitchDeg = Math.abs(Math.atan2(noseTip.y - eyeMidY, faceBox.height * 0.5) * 180 / Math.PI);
+  const rollDeg = detection.angle?.roll || 0;
+  const yawDeg = detection.angle?.yaw || 0;
+  const pitchDeg = detection.angle?.pitch || 0;
 
-  // Use a more stable pitch approximation based on nose vertical offset relative to half face height
-  // This reduces overestimation and gives results closer to actual head nod angle.
-  const pitchDeg = Math.abs(Math.atan2(noseTip.y - eyeMidY, faceBox.height * 0.5) * 180 / Math.PI);
-  
-  const alignmentGood = rollDeg <= 7 && yawDeg <= 15 && pitchDeg <= 25;
+  const alignmentGood = rollDeg <= 7 && yawDeg <= 15 && pitchDeg <= 10;
   const minFaceSizeGood = faceHeightRatio >= 0.60 && faceHeightRatio <= 0.75;
   const resolutionGood = width >= 800 && height >= 600;
 
+  //expressão neutra: neutral >= 0.95 e todas as outras expressões < 0.05
+  const neutralThreshold = 0.95;   // mínimo aceitável para neutral
+  const otherThreshold = 0.05;     // máximo aceitável para outras expressões
+  let neutralExpressionGood = false;
+  // Verifica se neutral é suficientemente alto
+  if (detection?.expressions?.neutral >= neutralThreshold) {        
+    // Verifica se alguma outra expressão ultrapassa o limite
+    for (const [expression, value] of Object.entries(detection?.expressions || {})) {
+      if (expression !== "neutral" && value > otherThreshold) {
+        neutralExpressionGood = false;
+        break;
+      }
+    }
+    neutralExpressionGood = true;
+  } else {  
+    neutralExpressionGood = false;
+  }
+
+  
   let bgSum = 0;
   let bgSumSq = 0;
   let bgCount = 0;
@@ -108,7 +128,8 @@ function analyzeImageData(img, detection) {
       faceSize: minFaceSizeGood,
       resolution: resolutionGood,
       background: backgroundGood,
-      lighting: lightingGood
+      lighting: lightingGood,
+      neutralExpression: neutralExpressionGood
     },
     metrics: {
       rollDeg: rollDeg.toFixed(1),
@@ -257,12 +278,14 @@ function App() {
           await faceapi.nets.tinyFaceDetector.loadFromUri(REMOTE_MODEL_URL);
           await faceapi.nets.faceLandmark68Net.loadFromUri(REMOTE_MODEL_URL);
           await faceapi.nets.faceLandmark68TinyNet.loadFromUri(REMOTE_MODEL_URL);
+          await faceapi.nets.faceExpressionNet.loadFromUri(REMOTE_MODEL_URL);
           setStateMessage('Loaded remote models from CDN.');
         } catch (remoteErr) {
           console.warn('Remote models failed, trying local.', remoteErr);
           await faceapi.nets.tinyFaceDetector.loadFromUri(LOCAL_MODEL_URL);
           await faceapi.nets.faceLandmark68Net.loadFromUri(LOCAL_MODEL_URL);
           await faceapi.nets.faceLandmark68TinyNet.loadFromUri(LOCAL_MODEL_URL);
+          await faceapi.nets.faceExpressionNet.loadFromUri(LOCAL_MODEL_URL);
           setStateMessage('Loaded local models from /models.');
         }
 
@@ -477,12 +500,14 @@ function App() {
       const img = await loadImageFromDataURL(screenshot);
       let detection = await faceapi
         .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.4 }))
-        .withFaceLandmarks(true);
+        .withFaceLandmarks(true)
+        .withFaceExpressions();
 
       if (!detection) {
         const backup = await faceapi
           .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 256, scoreThreshold: 0.3 }))
-          .withFaceLandmarks(true, { useTinyModel: true });
+          .withFaceLandmarks(true, { useTinyModel: true })
+          .withFaceExpressions();
 
         if (backup) {
           console.warn('Primary landmark model missed; using backup tiny landmark model.');
@@ -535,7 +560,7 @@ function App() {
       setAnalysisSummary([
         `Roll ${metrics.rollDeg}° (<=7° allowed)`,
         `Yaw ${metrics.yawDeg}° (<=15° allowed)`,
-        `Pitch ${metrics.pitchDeg}° (<=25° allowed)`,
+        `Pitch ${metrics.pitchDeg}° (<=10° allowed)`,
         `Face height ratio ${metrics.faceHeightRatio}%`,
         `Resolution ${metrics.resolution}`,
         `Background variance ${metrics.bgVariance}`,

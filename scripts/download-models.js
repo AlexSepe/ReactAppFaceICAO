@@ -6,7 +6,9 @@ const modelFiles = [
   'tiny_face_detector_model-shard1',
   'tiny_face_detector_model-weights_manifest',
   'face_landmark_68_model-shard1',
-  'face_landmark_68_model-weights_manifest'
+  'face_landmark_68_model-weights_manifest',
+  'face_expression_model-shard1',
+  'face_expression_model-weights_manifest'
 ];
 const baseUrl = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
 const outputDir = path.resolve(__dirname, '..', 'public', 'models');
@@ -58,10 +60,10 @@ function downloadBin(url, dest) {
 async function main() {
   await ensureDir();
 
-  console.log('Downloading model manifests and data (tiny_face_detector + face_landmark_68)');
+  console.log('Downloading model manifests and data (tiny_face_detector + face_landmark_68 + face_expression_model)');
 
   // Download both json and weight shards
-  for (const modelName of ['tiny_face_detector_model', 'face_landmark_68_model']) {
+  for (const modelName of ['tiny_face_detector_model', 'face_landmark_68_model', 'face_expression_model']) {
     const manifestUrl = `${baseUrl}/${modelName}-weights_manifest.json`;
     const manifestPath = path.join(outputDir, `${modelName}-weights_manifest.json`);
     console.log('Downloading', manifestUrl);
