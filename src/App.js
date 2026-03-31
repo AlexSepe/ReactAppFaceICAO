@@ -16,6 +16,7 @@ const initialReport = [
   { id: 'faceDetected', label: 'Face detected', passed: null, message: 'Waiting for detection' },
   { id: 'neutralExpression', label: 'Neutral expression', passed: null, message: 'Waiting for detection' },
   { id: 'alignment', label: 'Head alignment (roll/yaw/pitch)', passed: null, message: 'Waiting for detection' },
+  { id: 'centered', label: 'Face centered', passed: null, message: 'Waiting for detection' },
   { id: 'faceSize', label: 'Face size ratio (>=60% && <=75%)', passed: null, message: 'Waiting for detection' },
   { id: 'resolution', label: 'Image resolution (>=800x600)', passed: null, message: 'Waiting for detection' },
   { id: 'background', label: 'Background uniformity (low variance)', passed: null, message: 'Waiting for detection' },
@@ -78,6 +79,22 @@ function analyzeImageData(img, detection) {
     neutralExpressionGood = false;
   }
 
+  //Analisa se rosto esta centralizado
+  function checkFaceCentered(detection, videoWidth, videoHeight, tolerance = 50) {
+    if (!detection) return false;
+    const faceCenterX = detection.box.x + detection.box.width / 2;
+    //const faceCenterY = detection.box.y + detection.box.height / 2;
+
+    const frameCenterX = videoWidth / 2;
+    //const frameCenterY = videoHeight / 2;
+
+    const centeredX = Math.abs(faceCenterX - frameCenterX) < tolerance;
+    //const centeredY = Math.abs(faceCenterY - frameCenterY) < tolerance;
+
+    return centeredX;// && centeredY;
+  }
+  const isCentered = checkFaceCentered(detection.detection, width, height);
+
   
   let bgSum = 0;
   let bgSumSq = 0;
@@ -129,7 +146,8 @@ function analyzeImageData(img, detection) {
       resolution: resolutionGood,
       background: backgroundGood,
       lighting: lightingGood,
-      neutralExpression: neutralExpressionGood
+      neutralExpression: neutralExpressionGood,
+      centered: isCentered
     },
     metrics: {
       rollDeg: rollDeg.toFixed(1),
@@ -309,6 +327,24 @@ function App() {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, rect.width, rect.height);
 
+      // Desenha máscara oval
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.ellipse(
+        canvas.width / 2,
+        canvas.height / 2,
+        120, // raio horizontal
+        150, // raio vertical
+        0,
+        0,
+        2 * Math.PI
+      );
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      
+      
       if (!mpDetected || !boundingBox?.length) {
         setFramingGuidance('No face bounding box from MediaPipe yet.');
         return;
@@ -319,7 +355,7 @@ function App() {
         setFramingGuidance('No bounding box data available.');
         return;
       }
-
+      
       const isMirrored = true;
       let xMin = bb.xMin * rect.width;
       const yMin = bb.yMin * rect.height;
@@ -372,7 +408,7 @@ function App() {
             });
           };
 
-          // Draw eyes, nose, and mouth
+          //Draw eyes, nose, and mouth
           // try {
           //   drawLandmarkBox(detection.landmarks.getLeftEye(), 'rgba(255, 0, 0, 0.8)');
           //   drawLandmarkBox(detection.landmarks.getRightEye(), 'rgba(255, 0, 0, 0.8)');
@@ -581,7 +617,7 @@ function App() {
     if (compliantSnapshots.length === 0) return;
     const link = document.createElement('a');
     link.href = compliantSnapshots[compliantSnapshots.length - 1];
-    link.download = 'compliant-passport-photo.jpg';
+    link.download = 'compliant-photo.jpg';
     link.click();
   };
 
@@ -696,7 +732,7 @@ function App() {
                 onMouseOver={(e) => e.target.style.backgroundColor = '#158c0c'}
                 onMouseOut={(e) => e.target.style.backgroundColor = '#1a8c11'}
               >
-                Download compliant passport photo
+                Download compliant photo
               </button>
             </div>
           )}
@@ -708,7 +744,7 @@ function App() {
           position: 'fixed',
           top: '2rem',
           left: '2rem',
-          width: '500px',
+          width: '400px',
           maxHeight: '70vh',
           backgroundColor: 'var(--bg-secondary, #f5f5f5)',
           border: '1px solid var(--border-color, #ddd)',
@@ -720,16 +756,16 @@ function App() {
           fontFamily: 'var(--font-family, sans-serif)'
         }}
       >
-        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '1.1rem' }}>ICAO Compliance Report</h2>
-        <p style={{ marginBottom: '1rem', fontSize: '0.95rem' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600 }}>ICAO Compliance Report</h2>
+        <p style={{ marginBottom: '1rem', fontSize: '0.8rem' }}>
           <strong>Quality Score:</strong> {qualityScore !== null ? `${qualityScore}%` : 'N/A'}&nbsp;|&nbsp;<strong>Grade:</strong> {qualityGrade}
         </p>
-        <table className="rule-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+        <table className="rule-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr>
               <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Rule</th>
               <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Outcome</th>
-              <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Details</th>
+              {/* <th style={{ textAlign: 'left', padding: '0.5rem', borderBottom: '1px solid #ccc' }}>Details</th> */}
             </tr>
           </thead>
           <tbody>
@@ -744,7 +780,7 @@ function App() {
                   }}>
                   {item.passed === null ? 'Pending' : item.passed ? 'Pass' : 'Fail'}
                 </td>
-                <td style={{ padding: '0.5rem' }}>{item.message}</td>
+                {/* <td style={{ padding: '0.5rem' }}>{item.message}</td> */}
               </tr>
             ))}
           </tbody>
@@ -775,15 +811,15 @@ function App() {
       <CompliantPhotos compliantSnapshots={compliantSnapshots} />
 
       <div className="panel">
-        <h3>Tips for better passport/ID photos</h3>
+      <h3>Dicas para melhores fotos de identificação</h3>
         <ul>
-          <li>Maintain a straight head pose, low tilt and no yaw.</li>
-          <li>Keep the face centered and occupying 40-75% of image height.</li>
-          <li>Use a plain, light, uniform background with no glare.</li>
-          <li>Ensure high contrast/lighting across the face and avoid deep shadows.</li>
-          <li>Capture at 800x600 or greater resolution.</li>
+          <li>Mantenha a cabeça reta, com pouca inclinação e sem rotação lateral.</li>
+          <li>Mantenha o rosto centralizado e ocupando entre 60% e 75% da altura da imagem.</li>
+          <li>Use um fundo claro, uniforme e sem reflexos.</li>
+          <li>Garanta boa iluminação e contraste no rosto, evitando sombras profundas.</li>
+          <li>Capture em resolução mínima de 800x600 ou superior.</li>
         </ul>
-      </div>
+      </div>      
 
       <div className="status"><em>{stateMessage}</em></div>
     </div>
